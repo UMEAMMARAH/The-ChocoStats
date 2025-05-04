@@ -7,7 +7,7 @@ This project is focused on analyzing chocolate sales data and developing a Shiny
 - Ume Ammarah 23F-3034
 - Zainab 23F-0545
 - Fatima 23F-0791
-- Aiza Khurram 23F-0745
+- Aiza Khurram 23F-0575
 
 
 ## Project Features
