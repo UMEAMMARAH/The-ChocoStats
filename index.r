@@ -1,10 +1,11 @@
 # Load required libraries
-library(shiny)
+library(shiny)            # used for web applications / package 
 library(ggplot2)
-library(dplyr)
+library(dplyr)          
 library(skimr)       # For descriptive stats
 library(broom)       # For tidy regression output
 library(DT)          # For clean data tables
+library(moments)     # For skewness calculation
 
 # Read the data
 data <- read.csv("Cleaned_Chocolate_Sales.csv", stringsAsFactors = FALSE)
@@ -102,7 +103,7 @@ ui <- fluidPage(
                br(),
                h4("Data Cleaning Process:"),
                tags$ul(
-                 tags$li("Amount Formatting: The sales amount was cleaned by removing dollar signs ($) and commas (,), ensuring it's in numeric format for analysis."),
+                 tags$li("Amount Formatting: The sales amo`unt was cleaned by removing dollar signs ($) and commas (,), ensuring it's in numeric format for analysis."),
                  tags$li("Date Formatting: Dates were converted into the correct Date type format to facilitate time-based analysis."),
                  tags$li("Missing Values: Any missing or NA values in the data were either handled appropriately or removed to avoid any biases in the analysis.")
                ),
@@ -166,6 +167,11 @@ ui <- fluidPage(
                  column(12, h4("Distribution of Sales Amount")),
                  column(12, plotOutput("distPlot"))
                ),
+               hr(),
+               fluidRow(
+                 column(12, h4("Histogram of Sales by Date")),
+                 column(12, plotOutput("histogramPlot"))
+               ),
                hr()
              )
     ),
@@ -178,11 +184,6 @@ ui <- fluidPage(
                ),
                hr(),
                fluidRow(
-                 column(12, h4("Descriptive Stats")),
-                 column(12, DT::dataTableOutput("descStats"))
-               ),
-               hr(),
-               fluidRow(
                  column(12, h4("Regression Summary: Sales vs Date")),
                  column(12, verbatimTextOutput("regressionSummary"))
                ),
@@ -192,107 +193,107 @@ ui <- fluidPage(
                  column(12, plotOutput("regPlot"))
                )
              )
+    ),
+    
+    tabPanel("Statistical Measures",
+             fluidPage(
+               # Title with improved styling
+               h3("Descriptive Statistical Measures (All Sales)", style = "font-family: Arial, sans-serif; color: #5e412f; font-weight: bold;"),
+               br(),
+               # Section for Descriptive Statistics Table
+               fluidRow(
+                 column(12,
+                   # Add a description for the data table
+                   h4("Descriptive Statistics Table", style = "font-size: 16px; color: #5e412f; font-weight: bold;"),
+                   DT::dataTableOutput("descStats")
+                 )
+               ),
+               br(),
+               # Section for Sales Distribution Plot (Histogram)
+               fluidRow(
+                 column(12,
+                   h4("Sales Amount Distribution", style = "font-size: 16px; color: #5e412f; font-weight: bold;"),
+                   plotOutput("salesDistPlot")
+                 )
+               ),
+               br(),
+               # Skewness text output
+               fluidRow(
+                 column(12,
+                   h4("Skewness of Sales Distribution", style = "font-size: 16px; color: #5e412f; font-weight: bold;"),
+                   textOutput("skewnessText")
+                 )
+               )
+             )
     )
   )
 )
 
-# Server logic
+# Server logic for the statistical measures
 server <- function(input, output) {
   
-  # Bar chart
-  output$barChart <- renderPlot({
-    ggplot(top_5_sales, aes(x = reorder(Product, Total_Sales), y = Total_Sales, fill = Product)) +
-      geom_bar(stat = "identity") +
-      theme_minimal() +
-      labs(title = "Top 5 Best-Selling Products", x = "Product", y = "Total Sales") +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1), 
-            plot.title = element_text(face = "bold", size = 16),
-            axis.title = element_text(size = 14),
-            axis.text = element_text(size = 12))
-  })
-
-  # Pie chart
-  output$pieChart <- renderPlot({
-    pie_data <- top_5_sales %>% 
-      mutate(Percent = Total_Sales / sum(Total_Sales) * 100)
-    
-    ggplot(pie_data, aes(x = "", y = Percent, fill = Product)) +
-      geom_bar(width = 1, stat = "identity") +
-      coord_polar("y") +
-      theme_void() +
-      labs(title = "Sales Distribution of Top 5 Products") +
-      theme(plot.title = element_text(face = "bold", size = 16))
-  })
-
-  # Box plot
-  output$boxPlot <- renderPlot({
-    ggplot(data, aes(x = Product, y = Amount)) +
-      geom_boxplot(fill = "#7d5a4d", color = "#5e412f") +
-      theme_minimal() +
-      labs(title = "Boxplot of Amount by Product", x = "Product", y = "Amount") +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1), 
-            plot.title = element_text(face = "bold", size = 16),
-            axis.title = element_text(size = 14),
-            axis.text = element_text(size = 12))
-  })
-
-  # Descriptive stats
+  # Function to calculate mode
+  get_mode <- function(x) {
+    ux <- unique(x)
+    ux[which.max(tabulate(match(x, ux)))]
+  }
+  
+  # Descriptive stats with confidence interval
   output$descStats <- DT::renderDataTable({
-    skimr::skim(data) %>% 
-      filter(skim_type == "numeric") %>% 
-      select(skim_variable, numeric.mean, numeric.sd, numeric.p0, numeric.p50, numeric.p100)
-  }, options = list(dom = 't'))
-
-  # Regression summary (clean format using broom)
-  output$regressionSummary <- renderPrint({
-    model <- lm(Amount ~ NumericDate, data = data)
-    broom::tidy(model)
-  })
-
-  # Regression plot with equation
-  # Regression plot with refined equation and R-squared
-output$regPlot <- renderPlot({
-  model <- lm(Amount ~ NumericDate, data = data)
-  intercept <- coef(model)[1]
-  slope <- coef(model)[2]
-  r_squared <- summary(model)$r.squared
-  
-  eq <- bquote(italic(y) == .(round(slope, 2)) %.% italic(x) + .(round(intercept, 2)) ~ "," ~ R^2 == .(round(r_squared, 3)))
-  
-  ggplot(data, aes(x = Date, y = Amount)) +
-    geom_point(alpha = 0.6, color = "#5e412f") +
-    geom_smooth(method = "lm", color = "#7d5a4d", fill = "#c57f6a", se = TRUE) +
-    annotate("text", x = min(data$Date, na.rm = TRUE), 
-             y = max(data$Amount, na.rm = TRUE), 
-             label = as.expression(eq), 
-             hjust = 0, vjust = 1.2, size = 5, color = "darkred") +
-    labs(
-      title = "Linear Regression: Sales Amount Over Time",
-      x = "Date",
-      y = "Sales Amount (USD)"
-    ) +
-    theme_minimal() +
-    theme(
-      plot.title = element_text(face = "bold", size = 16),
-      axis.title = element_text(size = 14),
-      axis.text = element_text(size = 12)
+    amount <- data$Amount[!is.na(data$Amount)]
+    
+    # Calculate statistics
+    stats <- data.frame(
+      Statistic = c("Mean", "Median", "Mode", "Minimum", "Maximum", "Range", 
+                    "Variance", "Standard Deviation", "Skewness"),
+      Value = c(
+        mean(amount),
+        median(amount),
+        get_mode(amount),
+        min(amount),
+        max(amount),
+        max(amount) - min(amount),
+        var(amount),
+        sd(amount),
+        moments::skewness(amount)
+      )
     )
-})
+    
+    # Round values to 2 decimal places
+    stats$Value <- round(stats$Value, 2)
+    
+    stats
+  }, options = list(
+    dom = 't',  # Only show the table without search, pagination
+    rowCallback = JS(
+      'function(row, data, index) {
+        $("td", row).css("font-size", "14px"); // Change font size
+        $("td:nth-child(1)", row).css("font-weight", "bold"); // Bold first column
+        $("td", row).css("padding", "10px"); // Add padding
+      }'
+    )
+  ))
 
-
-  # Distribution plot
-  output$distPlot <- renderPlot({
+  # Add a histogram to represent sales distribution
+  output$salesDistPlot <- renderPlot({
     ggplot(data, aes(x = Amount)) +
-      geom_histogram(aes(y = ..density..), bins = 30, fill = "#7d5a4d", color = "#5e412f") +
-      stat_function(fun = dnorm,
-                    args = list(mean = mean(data$Amount, na.rm = TRUE),
-                                sd = sd(data$Amount, na.rm = TRUE)),
-                    col = "red", size = 1.2) +
+      geom_histogram(binwidth = 50, fill = "#7d5a4d", color = "#5e412f", alpha = 0.7) +
       theme_minimal() +
-      labs(title = "Normal Distribution Fit to Sales Amount", x = "Amount", y = "Density")
+      labs(title = "Sales Amount Distribution", x = "Sales Amount (USD)", y = "Frequency") +
+      theme(
+        plot.title = element_text(face = "bold", size = 16),
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12)
+      )
   })
   
+  # Skewness text output
+  output$skewnessText <- renderText({
+    amount <- data$Amount[!is.na(data$Amount)]
+    skew_value <- moments::skewness(amount)
+    paste("Skewness: ", round(skew_value, 2))
+  })
 }
 
-# Run the app
+# Run the application 
 shinyApp(ui = ui, server = server)
